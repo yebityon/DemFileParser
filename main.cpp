@@ -15,6 +15,47 @@ using elemtnType = std::tuple<std::string,pos>;
 //the namespace of rapidxml
 namespace rx = rapidxml;
 
+struct dem10bPointData {
+    double x,y,z;
+    std::string type;
+};
+
+class dem10bParser{
+    public:
+    dem10bParser(std::string fileName_) : fileName(fileName_){};
+    
+    void generateDocumentFile()
+    {
+        inputFile = rx::file<>(fileName);
+        
+        try
+        {
+            doc.parse<0>(inputFile.data());
+        }
+        catch (rx:: parse_error& err)
+        {
+            std::cout << "failed to parser xml data" << std::endl;
+            targetXML.close();
+            exit(9);
+        }
+    }
+
+    
+    
+    
+    private:
+
+    rx::xml_document<> doc;
+    rx::file<> inputFile;
+
+    
+    std::string fileName;
+    unsigned int maxX,maxY;
+    unsigned int sx, sy;
+    std::vector<std::vector<dem10bPointData>> pointMatrix;
+    
+    
+}
 
 
 //NOTE: DO NOT USE THIS FUNC WHEN YOU DEPLOY THIS 
@@ -200,3 +241,4 @@ int main(int argc, char* argv[])
     std::cout << intputXMLFilename << std::endl;
     
 }
+
