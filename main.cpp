@@ -51,22 +51,24 @@ void printNode(rx::xml_node<>* node, unsigned int indent = 0)
     
 }
 
-void traversal(rx::xml_node<>* node, std::vector<elemtnType>& out)
+void traversal(rx::xml_node<>* node, std::vector<elemtnType>& out, unsigned int& sx, unsigned int& sy)
 {
     if(node == nullptr)
     {
         return;
     }
     
-    bool isGridData = false;
+    bool isGridDataNode = false;
+    bool isStartPointNode = false;
  
     if(node  -> name_size() > 0)
     {
-        isGridData = (  node -> name() == std::string("gml:tupleList") );
+        isGridDataNode = (  node -> name() == std::string("gml:tupleList") );
+        isStartPointNode = (node -> name() == std::string("gml:startPoint"));
         
     }
     
-    if(isGridData)
+    if(isGridDataNode)
     {
         std::cout << "found!" <<std::endl;
 
@@ -92,17 +94,35 @@ void traversal(rx::xml_node<>* node, std::vector<elemtnType>& out)
              
              pos  t{0.0,0.0,std::stod(pos_z)};
              out.emplace_back(typeName,t);
-
              
         }
-        return;
+    }  else  if(isStartPointNode)
+    {
+        std::string pos_sx{}, pos_sy{};
+
+        bool hasCehckedSeparator = false;
+        const char separator = ' ';
+
+        for(const char c : std::string(node -> value()))
+        {
+            if(c == separator )
+            {
+                hasCehckedSeparator = true;
+            } else 
+            {
+                (hasCehckedSeparator  ?  pos_sx : pos_sy).push_back(c);
+            }
+        }
+        sx = static_cast<unsigned int> (std::stoi(pos_sx));
+        sy = static_cast<unsigned int> (std::stoi(pos_sy));
+        
     }
     
     
     // traversal child node
-    traversal(node -> first_node(),out);
+    traversal(node -> first_node(),out,sx,sy);
     // traversal sibling node
-    traversal( node -> next_sibling(),out);
+    traversal( node -> next_sibling(),out,sx,sy);
     
     return;
 }
@@ -145,13 +165,38 @@ int main(int argc, char* argv[])
         targetXML.close();
         exit(9);
     }
+    unsigned int sx  = 123, sy = 123;
 
     std::vector<elemtnType> out{};
 
-    traversal(doc.first_node(),out);
+    traversal(doc.first_node(),out,sx,sy);
 
     std::cout <<"out_size " <<  out.size() << std::endl;
-    
+    std::cout << sx << sy << std::endl;
+
+    const unsigned int  maxY  = 750;
+    const unsigned int  maxX = 1125;
+
+    std::vector<std::vector<pos>> pointMatrix(maxY, std::vector<pos>(maxX));
+
+    for(unsigned int i = 0; i < out.size(); ++i)
+    {
+        const int iy = i / maxX;
+        const int ix = i - iy *maxX;
+        
+        pointMatrix[iy][ix] = std::get<1>(out[i]);
+        
+    }
+
+    for(auto & v : pointMatrix)
+    {
+        for(auto [x,y,z] : v)
+        {
+            std::cout << ( abs(z + 9999) < 1e-6 ?  " " : "X")  << " ";
+        }
+
+        std::cout << std::endl;
+    }
     std::cout << intputXMLFilename << std::endl;
     
 }
