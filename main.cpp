@@ -22,11 +22,11 @@ struct dem10bPointData {
 
 class dem10bParser{
     public:
-    dem10bParser(std::string fileName_) : fileName(fileName_){};
+    dem10bParser(std::string fileName_) : fileName(fileName_), inputFile(rx::file<>(fileName_.c_str())) 
+    {};
     
     void generateDocumentFile()
     {
-        inputFile = rx::file<>(fileName);
         
         try
         {
@@ -35,15 +35,158 @@ class dem10bParser{
         catch (rx:: parse_error& err)
         {
             std::cout << "failed to parser xml data" << std::endl;
-            targetXML.close();
             exit(9);
         }
     }
 
+    void traversal()
+    {
+        traversal_ (doc.first_node());
+    }
+
+    void ceratePointMatrix()
+    {
+        pointMatrix = std::vector<std::vector<dem10bPointData>>(maxY,std::vector<dem10bPointData>(maxX));
+        
+         for(unsigned int i = 0; i < out.size(); ++i)
+        {
+            const int iy = i / maxX;
+            const int ix = i - iy *maxX;
+            
+            pointMatrix[iy][ix] = out[i];
+        }
+    }
+
+    // gettter
+    unsigned int getMaxX()
+    {
+        return maxX;
+    }
+
+    unsigned int getMaxY()
+    {
+        return maxY;
+    }
+    unsigned int getStartX()
+    {
+        return sx;
+    }
     
+    unsigned int getStartY()
+    {
+        return sy;
+    }
+
+    std::string getTargetFileName()
+    {
+        return fileName;
+    }
     
-    
+    auto getPointMatirx() -> const std::vector<std::vector<dem10bPointData>>& 
+    {
+        return pointMatrix;
+    }
     private:
+
+    void traversal_(rx::xml_node<>* node)
+    {
+        if(node == nullptr)
+        {
+            return;
+        }
+        
+        bool isGridDataNode = false;
+        bool isStartPointNode = false;
+        bool isGridBoundaryInfoNode = false;
+        
+    
+        if(node  -> name_size() > 0)
+        {
+            isGridDataNode = (  node -> name() == std::string("gml:tupleList") );
+            isStartPointNode = (node -> name() == std::string("gml:startPoint"));
+            isGridBoundaryInfoNode = ( node -> name()  == std::string("gml:high"));
+
+            
+        }
+        
+        if(isGridDataNode)
+        {
+            std::cout << "found!" <<std::endl;
+
+            std::stringstream ss{ std::string(node -> value())};
+            // std::cout << ss.str() << std::endl;
+            const char separator = '\n';
+            
+            std::string line{};
+            
+            while(getline(ss,line, separator ))
+            {
+                // WTF
+                if(line.find(",")  == std::string::npos)
+                continue;
+                
+                const std::string typeName = line.substr(0, line.find(","));
+
+                // std::cout <<  typeName << std::endl;
+                
+                const std::string pos_z = line.substr(line.find(",") + 1,line.size() - line.find(","));
+                
+                // std::cout << typeName  << " <->  " << pos_z << std::endl;
+                
+                out.push_back(dem10bPointData{0.0,0.0,std::stod(pos_z),typeName});
+                
+            }
+        }
+         else  if(isStartPointNode)
+        {
+            std::string pos_sx{}, pos_sy{};
+
+            bool hasCehckedSeparator = false;
+            const char separator = ' ';
+
+            for(const char c : std::string(node -> value()))
+            {
+                if(c == separator )
+                {
+                    hasCehckedSeparator = true;
+                } else 
+                {
+                    (hasCehckedSeparator  ?  pos_sx : pos_sy).push_back(c);
+                }
+            }
+            sx = static_cast<unsigned int> (std::stoi(pos_sx));
+            sy = static_cast<unsigned int> (std::stoi(pos_sy));
+        }
+        else if(isGridBoundaryInfoNode)
+        {
+            std::string str1{}, str2{};
+
+            bool hasCehckedSeparator = false;
+            const char separator = ' ';
+
+            for(const char c : std::string(node -> value()))
+            {
+                if(c == separator )
+                {
+                    hasCehckedSeparator = true;
+                } else 
+                {
+                    (hasCehckedSeparator  ?  str1 : str2).push_back(c);
+                }
+            }
+            maxY = static_cast<unsigned int> (std::stoi(str1) + 1);
+            maxX = static_cast<unsigned int> (std::stoi(str2) + 1);
+            
+            std::cout << maxX << " " << maxY << std::endl;
+        }
+        
+        // traversal child node
+        traversal_(node -> first_node());
+        // traversal sibling node
+        traversal_( node -> next_sibling());
+        
+        return;
+    }
 
     rx::xml_document<> doc;
     rx::file<> inputFile;
@@ -52,10 +195,11 @@ class dem10bParser{
     std::string fileName;
     unsigned int maxX,maxY;
     unsigned int sx, sy;
+    std::vector<dem10bPointData>out;
     std::vector<std::vector<dem10bPointData>> pointMatrix;
     
-    
-}
+};
+
 
 
 //NOTE: DO NOT USE THIS FUNC WHEN YOU DEPLOY THIS 
@@ -178,67 +322,80 @@ int main(int argc, char* argv[])
 
     const char* intputXMLFilename = argv[1];
 
-    std::ifstream targetXML(intputXMLFilename);
-
-    if(!targetXML)
-    {
-        std::cout <<  "can not open " << intputXMLFilename << std::endl;
-
-        targetXML.close();
-        exit(9);
-    }
-
-    for(std::string  line; std::getline(targetXML,line);)
-    {
-      //  std::cout << line << std::endl;
-    }
+    dem10bParser d10Parser(intputXMLFilename);
     
-    rx::xml_document<> doc;
-    rx::file<> inputFile(intputXMLFilename);
+    d10Parser.generateDocumentFile();
+    d10Parser.traversal();
+    d10Parser.ceratePointMatrix();
+    
+    
 
-    try
-    {
-        doc.parse<0>(inputFile.data());
-    }
-    catch (rx:: parse_error& err)
-    {
-        std::cout << "failed to parser xml data" << std::endl;
-        targetXML.close();
-        exit(9);
-    }
-    unsigned int sx  = 123, sy = 123;
+    std::cout << d10Parser.getTargetFileName() << std::endl;
+    assert(d10Parser.getMaxX() == 1125);
+    assert(d10Parser.getMaxY() == 750);
+    assert(d10Parser.getStartY() ==d10Parser.getStartX() && d10Parser.getStartX() == 0);
+    assert (d10Parser.getPointMatirx().size() == d10Parser.getMaxY());
+    
+    // std::ifstream targetXML(intputXMLFilename);
 
-    std::vector<elemtnType> out{};
+    // if(!targetXML)
+    // {
+    //     std::cout <<  "can not open " << intputXMLFilename << std::endl;
 
-    traversal(doc.first_node(),out,sx,sy);
+    //     targetXML.close();
+    //     exit(9);
+    // }
 
-    std::cout <<"out_size " <<  out.size() << std::endl;
-    std::cout << sx << sy << std::endl;
+    // for(std::string  line; std::getline(targetXML,line);)
+    // {
+    //   //  std::cout << line << std::endl;
+    // }
+    
+    // rx::xml_document<> doc;
+    // rx::file<> inputFile(intputXMLFilename);
 
-    const unsigned int  maxY  = 750;
-    const unsigned int  maxX = 1125;
+    // try
+    // {
+    //     doc.parse<0>(inputFile.data());
+    // }
+    // catch (rx:: parse_error& err)
+    // {
+    //     std::cout << "failed to parser xml data" << std::endl;
+    //     targetXML.close();
+    //     exit(9);
+    // }
+    // unsigned int sx  = 123, sy = 123;
 
-    std::vector<std::vector<pos>> pointMatrix(maxY, std::vector<pos>(maxX));
+    // std::vector<elemtnType> out{};
 
-    for(unsigned int i = 0; i < out.size(); ++i)
-    {
-        const int iy = i / maxX;
-        const int ix = i - iy *maxX;
+    // traversal(doc.first_node(),out,sx,sy);
+
+    // std::cout <<"out_size " <<  out.size() << std::endl;
+    // std::cout << sx << sy << std::endl;
+
+    // const unsigned int  maxY  = 750;
+    // const unsigned int  maxX = 1125;
+
+    // std::vector<std::vector<pos>> pointMatrix(maxY, std::vector<pos>(maxX));
+
+    // for(unsigned int i = 0; i < out.size(); ++i)
+    // {
+    //     const int iy = i / maxX;
+    //     const int ix = i - iy *maxX;
         
-        pointMatrix[iy][ix] = std::get<1>(out[i]);
+    //     pointMatrix[iy][ix] = std::get<1>(out[i]);
         
-    }
+    // }
 
-    for(auto & v : pointMatrix)
-    {
-        for(auto [x,y,z] : v)
-        {
-            std::cout << ( abs(z + 9999) < 1e-6 ?  " " : "X")  << " ";
-        }
+    // for(auto & v : pointMatrix)
+    // {
+    //     for(auto [x,y,z] : v)
+    //     {
+    //         std::cout << ( abs(z + 9999) < 1e-6 ?  " " : "X")  << " ";
+    //     }
 
-        std::cout << std::endl;
-    }
-    std::cout << intputXMLFilename << std::endl;
+    //     std::cout << std::endl;
+    // }
+    // std::cout << intputXMLFilename << std::endl;
     
 }
-
